@@ -1,0 +1,526 @@
+/* ============ EdenRise Academy — Firebase auth + per-profile cloud sync ============
+   Loads the Firebase modular SDK from the gstatic CDN (no build step). Handles
+   Google + email/password sign-in, stores each learner's state under users/{uid}
+   in Firestore, and bridges to app.js via window.EdenApp / window.EdenCloud.        */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, setPersistence, browserLocalPersistence, indexedDBLocalPersistence,
+  GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile,
+  sendPasswordResetEmail, sendEmailVerification, deleteUser
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js';
+import {
+  getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  doc, getDoc, getDocs, setDoc, serverTimestamp,
+  collection, addDoc, updateDoc, deleteDoc, onSnapshot, query, where,
+  increment, arrayUnion, arrayRemove
+} from 'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js';
+
+/* Firebase project comes from the active brand (brandkit.js). Each white-label
+   company points at its OWN project; the founding EdenRise values are the fallback. */
+const firebaseConfig = (window.BRAND && window.BRAND.firebase) || {
+  apiKey: 'AIzaSyBt4pfWRLWUdAjVL8xoEoR7o4wFCjUCUjs',
+  authDomain: 'edenrise-academy.firebaseapp.com',
+  projectId: 'edenrise-academy',
+  storageBucket: 'edenrise-academy.firebasestorage.app',
+  messagingSenderId: '295112713200',
+  appId: '1:295112713200:web:4f3beb0324b9b995383335',
+  measurementId: 'G-SWLQKTVJQS'
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+let db;
+try {   /* IndexedDB cache: repeat visits read state instantly, offline included */
+  db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+} catch (e) { db = getFirestore(app); }
+/* Persist the session across app restarts. IndexedDB persistence survives best;
+   fall back to localStorage. Returns a promise we await before any sign-in. */
+const persistenceReady = setPersistence(auth, indexedDBLocalPersistence)
+  .catch(() => setPersistence(auth, browserLocalPersistence)).catch(() => {});
+/* Complete a Google redirect sign-in if we're returning from one (mobile/PWA flow). */
+getRedirectResult(auth).catch(() => {});
+
+const KEY = 'edenrise-state-v2';
+const MODE = 'eden-auth-mode';          // 'firebase' | 'guest' | 'out'
+const $ = s => document.querySelector(s);
+const T = k => (typeof window.t === 'function' ? window.t(k) : k);
+const isPT = () => (typeof S !== 'undefined' && S.lang === 'pt');
+
+/* ---------- gate visibility (driven by html[data-gate]) ---------- */
+const gate = () => $('#authGate');
+function showGate() { document.documentElement.setAttribute('data-gate', 'on'); }
+function hideGate() { document.documentElement.setAttribute('data-gate', 'off'); }
+function setBusy(on) { const b = $('#authBusy'); if (b) b.classList.toggle('on', on); }
+function showErr(msg) { const e = $('#authErr'); if (e) { e.textContent = msg || ''; e.classList.toggle('on', !!msg); } }
+
+/* ---------- state <-> Firestore ---------- */
+function localState() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+/* ---- multi-tenant helpers ---- */
+const SUPERADMINS = (window.BRAND && window.BRAND.superadmins) || ['admin@edenrise.com', 'info@edenrise.com', 'john@edenrise.com'];
+const cid = () => ((localState().profile || {}).companyId) || 'edenrise';
+const isSuperEmail = e => SUPERADMINS.includes((e || '').trim().toLowerCase());
+const metaDocId = c => (c || cid()) === 'edenrise' ? '__meta' : '__meta_' + (c || cid());
+/* legacy docs without companyId belong to 'edenrise' */
+const ofCompany = (obj, c) => ((obj.companyId || 'edenrise') === (c || cid()));
+/* merge instead of clobber — earned things take the best of both devices */
+function mergeStates(cloud, local) {
+  if (!cloud) return local;
+  if (!local || !local.onboarded) return cloud;
+  const m = Object.assign({}, cloud);
+  m.xp = Math.max(cloud.xp || 0, local.xp || 0);
+  m.badges = [...new Set([...(cloud.badges || []), ...(local.badges || [])])];
+  m.quizzesPassed = Math.max(cloud.quizzesPassed || 0, local.quizzesPassed || 0);
+  m.streak = Math.max(cloud.streak || 0, local.streak || 0);
+  m.lang = local.lang || cloud.lang;
+  /* per-course: whichever device is further along wins; earliest completion date kept */
+  const depth = p => !p ? -1 : (p.done ? 1000 : (p.mod || 0) * 10 + (p.pct || 0) / 10);
+  m.progress = Object.assign({}, cloud.progress);
+  Object.entries(local.progress || {}).forEach(([id, lp]) => {
+    const cp = m.progress[id];
+    if (depth(lp) > depth(cp)) m.progress[id] = lp;
+    const da = [lp && lp.doneAt, cp && cp.doneAt].filter(Boolean);
+    if (da.length && m.progress[id]) m.progress[id].doneAt = Math.min(...da);
+  });
+  /* notes: union, longer text wins per key */
+  m.notes = Object.assign({}, local.notes);
+  Object.entries(cloud.notes || {}).forEach(([k, v]) => { if (!m.notes[k] || String(v).length > String(m.notes[k]).length) m.notes[k] = v; });
+  /* identity: cloud is source of truth, local fills gaps (e.g. fresh onboarding) */
+  m.profile = Object.assign({}, local.profile, cloud.profile);
+  if (local.profile && local.profile.notify) m.profile.notify = Object.assign({}, local.profile.notify, (cloud.profile || {}).notify);
+  return m;
+}
+let pushTimer = null;
+function stampProfileLocal(profile) {
+  const s = localState(); s.profile = profile; localStorage.setItem(KEY, JSON.stringify(s));
+}
+
+/* ---------- bridge exposed to app.js ---------- */
+window.EdenCloud = {
+  push(state) {
+    const u = auth.currentUser; if (!u) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { pushTimer = null; window.EdenCloud.flush(); }, 800);
+  },
+  flush() {
+    const u = auth.currentUser; if (!u) return;
+    if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+    const st = localState();
+    setDoc(doc(db, 'users', u.uid), { state: st, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+    /* public board entry — the real leaderboard everyone can read */
+    const p = st.profile || {};
+    if (!p.companyId) p.companyId = 'edenrise';   /* tenant stamp (founding tenant default) */
+    const name = p.name || (p.email ? p.email.split('@')[0] : 'Learner');
+    setDoc(doc(db, 'leaderboard', u.uid), {
+      name, username: p.username || '',
+      initials: name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ER',
+      xp: st.xp || 0, streak: st.streak || 0, level: st.xp != null ? st.xp : 0,
+      joinedAt: p.joinedAt || null, dept: p.dept || null, companyId: p.companyId || 'edenrise',
+      weekStart: st.weekStart || null, weekBaseXp: st.weekBaseXp || 0,
+      lastSeen: serverTimestamp(), updatedAt: serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  },
+  async saveOrgConfig(cfg) {
+    if (!auth.currentUser) throw new Error('not-signed-in');
+    await setDoc(doc(db, 'config', cid() === 'edenrise' ? 'org' : cid()), cfg, { merge: true });
+  },
+  heartbeat() {
+    const u = auth.currentUser; if (!u) return;
+    setDoc(doc(db, 'leaderboard', u.uid), { lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
+  },
+  async listBoard() {
+    const snap = await getDocs(collection(db, 'leaderboard'));
+    return snap.docs.map(d => Object.assign({ uid: d.id }, d.data())).filter(r => ofCompany(r));
+  },
+  async signOut() {
+    localStorage.setItem(MODE, 'out');
+    try { await signOut(auth); } catch (e) {}
+    localStorage.removeItem(KEY);   // clear this device; cloud copy is safe
+    location.reload();
+  },
+  async updateName(name) {
+    const u = auth.currentUser; if (!u || !name) return;
+    try { await updateProfile(u, { displayName: name }); } catch (e) {}
+  },
+  /* GDPR: erase the Firestore doc, the auth account, and this device's copy */
+  async deleteAccount() {
+    const u = auth.currentUser; if (!u) throw new Error('not-signed-in');
+    await deleteDoc(doc(db, 'users', u.uid));
+    await deleteDoc(doc(db, 'leaderboard', u.uid)).catch(() => {});
+    await deleteUser(u);                       /* throws auth/requires-recent-login if stale */
+    localStorage.removeItem(KEY);
+    localStorage.setItem(MODE, 'out');
+    setTimeout(() => location.reload(), 900);
+  },
+  /* team-published courses (AI Course Studio) — readable by everyone */
+  async saveCourse(course) {
+    const u = auth.currentUser; if (!u) throw new Error('not-signed-in');
+    const cc = isSuperEmail(u.email) ? null : cid();   /* superadmin publishes to the global catalog */
+    await setDoc(doc(db, 'courses', course.id), { course, companyId: cc, authorUid: u.uid, authorEmail: u.email || '', createdAt: serverTimestamp() });
+  },
+  async deleteCourse(id) {
+    if (!auth.currentUser) return;
+    await deleteDoc(doc(db, 'courses', id));
+  },
+  async listCourses() {
+    const snap = await getDocs(collection(db, 'courses'));
+    const out = { courses: [], meta: null, digests: [] };
+    const myMeta = metaDocId();
+    snap.docs.forEach(d => {
+      const x = d.data();
+      if (d.id === myMeta) out.meta = x.meta || null;
+      else if (d.id.startsWith('__meta')) return;                       /* other tenants' meta */
+      else if (x.digest) { if (ofCompany(x.digest)) out.digests.push(x.digest); }
+      else if (x.course) { if (!x.companyId || ofCompany(x)) out.courses.push(x.course); }
+    });
+    out.digests.sort((a, b) => (b.at || 0) - (a.at || 0));
+    return out;
+  },
+  /* department digests — published into the same public collection */
+  async saveDigest(d) {
+    const u = auth.currentUser; if (!u) throw new Error('not-signed-in');
+    d.companyId = d.companyId || cid();
+    await setDoc(doc(db, 'courses', 'digest-' + d.id), { digest: d, companyId: d.companyId, authorUid: u.uid, createdAt: serverTimestamp() });
+  },
+  async deleteDigest(id) {
+    if (!auth.currentUser) return;
+    await deleteDoc(doc(db, 'courses', 'digest-' + id));
+  },
+  /* studio meta (live sessions schedule, …) — lives in the public courses collection
+     so guests can read it and ONLY admins can write it, with the existing rules */
+  async saveMeta(meta) {
+    const u = auth.currentUser; if (!u) throw new Error('not-signed-in');
+    await setDoc(doc(db, 'courses', metaDocId()), { meta, companyId: cid(), authorUid: u.uid, updatedAt: serverTimestamp() });
+  },
+  // admin-only (enforced by Firestore rules): read every member's profile + state
+  async listMembers() {
+    const u = auth.currentUser;
+    const mapDoc = d => { const x = d.data(); return { uid: d.id, profile: x.profile || {}, state: x.state || {}, updatedAt: (x.updatedAt && x.updatedAt.toMillis) ? x.updatedAt.toMillis() : 0, createdAt: (x.createdAt && x.createdAt.toMillis) ? x.createdAt.toMillis() : 0 }; };
+    if (u && isSuperEmail(u.email)) {   /* superadmin: all docs, client-scope to the active tenant */
+      const snap = await getDocs(collection(db, 'users'));
+      return snap.docs.map(mapDoc).filter(m => ofCompany(m.profile || {}));
+    }
+    /* company admin: server-scoped query (rules enforce it) */
+    const snap = await getDocs(query(collection(db, 'users'), where('profile.companyId', '==', cid())));
+    return snap.docs.map(mapDoc);
+  },
+  /* ---- Phase 5: tenant management ---- */
+  async loadCompany() {
+    try {
+      const snap = await getDoc(doc(db, 'companies', cid()));
+      window.EdenCompany = snap.exists() ? Object.assign({ id: cid() }, snap.data())
+        : { id: cid(), name: cid() === 'edenrise' ? 'EdenRise' : cid(), status: 'active', adminEmails: [] };
+    } catch (e) { window.EdenCompany = { id: cid(), name: 'EdenRise', status: 'active', adminEmails: [] }; }
+    if (window.EdenApp && window.EdenApp.applyCompany) window.EdenApp.applyCompany(window.EdenCompany);
+    return window.EdenCompany;
+  },
+  async saveCompany(data) {
+    await setDoc(doc(db, 'companies', data.id || cid()), data, { merge: true });
+    if ((data.id || cid()) === cid()) { window.EdenCompany = Object.assign({}, window.EdenCompany, data); if (window.EdenApp && window.EdenApp.applyCompany) window.EdenApp.applyCompany(window.EdenCompany); }
+  },
+  async createCompany({ id, name, nif, adminEmail }) {
+    const code = (id + '-' + Math.random().toString(36).slice(2, 8)).toUpperCase();
+    await setDoc(doc(db, 'companies', id), { name, nif: nif || '', status: 'active', plan: 'trial', adminEmails: adminEmail ? [adminEmail.toLowerCase()] : [], inviteCode: code, createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'invites', code), { companyId: id, createdAt: serverTimestamp() });
+    return code;
+  },
+  async listCompanies() {
+    const snap = await getDocs(collection(db, 'companies'));
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  },
+  async resolveInvite(code) {
+    const snap = await getDoc(doc(db, 'invites', (code || '').trim().toUpperCase()));
+    return snap.exists() ? snap.data().companyId : null;
+  },
+  async joinCompany(code) {
+    const companyId = await window.EdenCloud.resolveInvite(code);
+    if (!companyId) throw new Error('invalid-code');
+    const s = localState(); s.profile = Object.assign({}, s.profile, { companyId });
+    localStorage.setItem(KEY, JSON.stringify(s));
+    window.EdenCloud.flush();
+    await window.EdenCloud.loadCompany();
+    return companyId;
+  },
+  async rotateInvite() {
+    const code = (cid() + '-' + Math.random().toString(36).slice(2, 8)).toUpperCase();
+    await setDoc(doc(db, 'invites', code), { companyId: cid(), createdAt: serverTimestamp() });
+    await setDoc(doc(db, 'companies', cid()), { inviteCode: code }, { merge: true });
+    window.EdenCompany = Object.assign({}, window.EdenCompany, { inviteCode: code });
+    return code;
+  }
+};
+
+/* ================= Community forum (real-time Firestore) ================= */
+function authorStub() {
+  const u = auth.currentUser;
+  const s = localState();
+  const prof = s.profile || {};
+  const name = (u && u.displayName) || prof.name || 'Learner';
+  const handle = prof.username || (u && u.email ? u.email.split('@')[0] : '');
+  const initials = name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ER';
+  return { authorUid: u ? u.uid : null, authorName: name, authorHandle: handle, authorInitials: initials };
+}
+window.EdenForum = {
+  canPost() { return !!auth.currentUser; },
+  me() { return authorStub(); },
+  // live feed of a channel; cb receives an array of posts (sorted newest-activity first)
+  subscribeChannel(channel, cb) {
+    const q = query(collection(db, 'forum_posts'), where('channel', '==', channel));
+    return onSnapshot(q, snap => {
+      const posts = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(p => ofCompany(p));
+      posts.sort((a, b) => (ms(b.lastActivity) || ms(b.createdAt)) - (ms(a.lastActivity) || ms(a.createdAt)));
+      cb(posts);
+    }, err => { console.error('[forum] channel sub', err); cb([]); });
+  },
+  subscribeThread(postId, cb) {
+    const q = query(collection(db, 'forum_posts', postId, 'replies'));
+    return onSnapshot(q, snap => {
+      const replies = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      replies.sort((a, b) => (ms(a.createdAt) || 0) - (ms(b.createdAt) || 0));
+      cb(replies);
+    }, err => { console.error('[forum] thread sub', err); cb([]); });
+  },
+  async createPost({ channel, kind, title, body, poll, official, pinned }) {
+    if (!auth.currentUser) throw new Error('not-signed-in');
+    return addDoc(collection(db, 'forum_posts'), Object.assign({
+      companyId: cid(),
+      channel, kind: kind || 'message', title: title || '', body,
+      createdAt: serverTimestamp(), lastActivity: serverTimestamp(),
+      replyCount: 0, likes: 0, likedBy: []
+    }, poll ? { poll } : {}, official ? { official: true } : {}, pinned ? { pinned: true } : {}, authorStub()));
+  },
+  /* all official broadcasts across channels (equality-only where — no index needed) */
+  async listOfficial() {
+    const snap = await getDocs(query(collection(db, 'forum_posts'), where('official', '==', true)));
+    const posts = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(p => ofCompany(p));
+    posts.sort((a, b) => (ms(b.createdAt) || 0) - (ms(a.createdAt) || 0));
+    return posts;
+  },
+  async addReply(postId, body) {
+    if (!auth.currentUser) throw new Error('not-signed-in');
+    await addDoc(collection(db, 'forum_posts', postId, 'replies'), Object.assign({
+      body, createdAt: serverTimestamp(), likes: 0, likedBy: []
+    }, authorStub()));
+    await updateDoc(doc(db, 'forum_posts', postId), { replyCount: increment(1), lastActivity: serverTimestamp() }).catch(() => {});
+  },
+  async toggleLike(postId, liked) {
+    const u = auth.currentUser; if (!u) return;
+    await updateDoc(doc(db, 'forum_posts', postId), {
+      likes: increment(liked ? -1 : 1),
+      likedBy: liked ? arrayRemove(u.uid) : arrayUnion(u.uid)
+    }).catch(() => {});
+  },
+  async toggleReplyLike(postId, replyId, liked) {
+    const u = auth.currentUser; if (!u) return;
+    await updateDoc(doc(db, 'forum_posts', postId, 'replies', replyId), {
+      likes: increment(liked ? -1 : 1),
+      likedBy: liked ? arrayRemove(u.uid) : arrayUnion(u.uid)
+    }).catch(() => {});
+  },
+  async react(postId, emoji, on) {
+    const u = auth.currentUser; if (!u) return;
+    await updateDoc(doc(db, 'forum_posts', postId), { ['reactions.' + emoji]: on ? arrayUnion(u.uid) : arrayRemove(u.uid) }).catch(() => {});
+  },
+  async vote(postId, optionIndex) {
+    const u = auth.currentUser; if (!u) return;
+    await updateDoc(doc(db, 'forum_posts', postId), { ['poll.votes.' + u.uid]: optionIndex }).catch(() => {});
+  },
+  async remove(postId) {
+    if (!auth.currentUser) return;
+    await deleteDoc(doc(db, 'forum_posts', postId)).catch(() => {});
+  },
+  async removeReply(postId, replyId) {
+    if (!auth.currentUser) return;
+    await deleteDoc(doc(db, 'forum_posts', postId, 'replies', replyId)).catch(() => {});
+    await updateDoc(doc(db, 'forum_posts', postId), { replyCount: increment(-1) }).catch(() => {});
+  },
+  async togglePin(postId, pinned) {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'forum_posts', postId), { pinned: !pinned }).catch(() => {});
+  },
+  uid() { const u = auth.currentUser; return u ? u.uid : null; }
+};
+function ms(ts) { return ts && typeof ts.toMillis === 'function' ? ts.toMillis() : (ts && ts.seconds ? ts.seconds * 1000 : 0); }
+
+/* ================= Field Missions — real-world proof, reviewed by admins ================= */
+window.EdenMissions = {
+  async submit({ courseId, note, photo }) {
+    const u = auth.currentUser; if (!u) throw new Error('not-signed-in');
+    return addDoc(collection(db, 'missions'), Object.assign({
+      companyId: cid(),
+      courseId, note: note || '', photo: photo || '',
+      status: 'pending', claimed: false, createdAt: serverTimestamp()
+    }, authorStub()));
+  },
+  async listMine() {
+    const u = auth.currentUser; if (!u) return [];
+    const snap = await getDocs(query(collection(db, 'missions'), where('authorUid', '==', u.uid)));
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+  },
+  async listPending() {
+    const snap = await getDocs(query(collection(db, 'missions'), where('status', '==', 'pending')));
+    const list = snap.docs.map(d => Object.assign({ id: d.id }, d.data())).filter(m => ofCompany(m));
+    list.sort((a, b) => (ms(a.createdAt) || 0) - (ms(b.createdAt) || 0));
+    return list;
+  },
+  async review(id, approved) {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'missions', id), { status: approved ? 'approved' : 'declined', reviewedAt: serverTimestamp() });
+  },
+  async claim(id) {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'missions', id), { claimed: true });
+  }
+};
+
+/* load team-published courses + studio meta for everyone (guests included) */
+(function loadCustomCourses(tries) {
+  window.EdenCloud.listCourses().then(({ courses, meta, digests }) => {
+    if (!window.EdenApp) return;
+    if (meta && window.EdenApp.applyMeta) window.EdenApp.applyMeta(meta);
+    if (digests && digests.length && window.EdenApp.applyDigests) window.EdenApp.applyDigests(digests);
+    if (courses.length) window.EdenApp.applyCustomCourses(courses);
+  }).catch(() => { if ((tries || 0) < 3) setTimeout(() => loadCustomCourses((tries || 0) + 1), 4000); });
+})(0);
+
+async function loadOrgConfig() {
+  try {
+    const snap = await getDoc(doc(db, 'config', cid() === 'edenrise' ? 'org' : cid()));
+    if (snap.exists()) { window.EdenOrg = snap.data(); if (window.syncTutorStatus) window.syncTutorStatus(); }
+  } catch (e) { /* not signed in yet or rules pending */ }
+}
+
+/* ---------- auth state ---------- */
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    localStorage.setItem(MODE, 'firebase');
+    /* enter IMMEDIATELY — sync happens behind the app, not in front of the user */
+    hideGate(); setBusy(false); showErr('');
+    const profile = {
+      uid: user.uid, email: user.email || '',
+      name: user.displayName || (user.email ? user.email.split('@')[0] : 'Learner'),
+      photo: user.photoURL || '',
+      provider: (user.providerData[0] && user.providerData[0].providerId) || 'password'
+    };
+    stampProfileLocal(profile);
+    if (window.EdenApp) window.EdenApp.applyProfile(profile);
+    try {
+      /* ONE read for state+profile, org config in parallel (both instant from cache on repeat visits) */
+      const [snap] = await Promise.all([getDoc(doc(db, 'users', user.uid)), loadOrgConfig(), window.EdenCloud.loadCompany()]);
+      const data = snap.exists() ? snap.data() : null;
+      if (data && data.state) localStorage.setItem(KEY, JSON.stringify(mergeStates(data.state, localState())));
+      if (window.EdenApp) { window.EdenApp.reloadState(); window.EdenApp.applyProfile(profile); }
+      /* the profile write is bookkeeping — deferred so it never blocks entry */
+      setTimeout(() => {
+        const payload = { profile, updatedAt: serverTimestamp() };
+        if (!data) { payload.state = localState(); payload.createdAt = serverTimestamp(); }
+        setDoc(doc(db, 'users', user.uid), payload, { merge: true }).catch(() => {});
+      }, 400);
+    } catch (e) { console.error('[auth] sync failed', e); }
+  } else {
+    const mode = localStorage.getItem(MODE);
+    if (mode === 'guest') { hideGate(); if (window.EdenApp) window.EdenApp.maybeOnboard(); }
+    else if (mode === 'firebase') { hideGate(); if (window.EdenApp) window.EdenApp.reloadState(); }  /* remembered: a returning member stays in with their cached state even if the session needs a moment (or is briefly offline) */
+    else showGate();
+  }
+});
+
+/* ---------- error copy ---------- */
+function friendly(code) {
+  const pt = isPT();
+  const m = {
+    'auth/invalid-email': pt ? 'Email inválido.' : 'Invalid email.',
+    'auth/missing-password': pt ? 'Introduza a palavra-passe.' : 'Enter a password.',
+    'auth/weak-password': pt ? 'A palavra-passe precisa de pelo menos 6 caracteres.' : 'Password needs at least 6 characters.',
+    'auth/email-already-in-use': pt ? 'Este email já tem conta — inicie sessão.' : 'That email already has an account — sign in instead.',
+    'auth/invalid-credential': pt ? 'Email ou palavra-passe incorretos.' : 'Wrong email or password.',
+    'auth/user-not-found': pt ? 'Conta não encontrada.' : 'No account found for that email.',
+    'auth/wrong-password': pt ? 'Palavra-passe incorreta.' : 'Wrong password.',
+    'auth/popup-closed-by-user': pt ? 'Janela fechada antes de concluir.' : 'Sign-in window closed before finishing.',
+    'auth/popup-blocked': pt ? 'O navegador bloqueou a janela — permita popups.' : 'Your browser blocked the popup — allow popups and retry.',
+    'auth/operation-not-allowed': pt ? 'Ative Email/Password no Firebase (Authentication → Sign-in method).' : 'Enable Email/Password in Firebase (Authentication → Sign-in method).',
+    'auth/unauthorized-domain': pt ? 'Domínio não autorizado (Firebase → Authentication → Settings → Authorized domains).' : 'Domain not authorized (Firebase → Authentication → Settings → Authorized domains).'
+  };
+  return m[code] || (pt ? 'Algo correu mal. Tente novamente.' : 'Something went wrong. Please try again.');
+}
+
+/* ---------- login form ---------- */
+let signupMode = false;
+function refreshMode() {
+  const g = gate(); if (!g) return;
+  g.classList.toggle('signup', signupMode);
+  const submit = $('#authSubmit'); if (submit) submit.textContent = signupMode ? T('auth_signup') : T('auth_signin');
+  const toggle = $('#authToggle'); if (toggle) toggle.textContent = signupMode ? T('auth_to_signin') : T('auth_to_signup');
+  showErr('');
+}
+function translateGate() {
+  const set = (sel, k) => { const el = $(sel); if (el) el.textContent = T(k); };
+  set('#authTitle', 'auth_welcome'); set('#authSub', 'auth_sub');
+  set('#authGoogleTxt', 'auth_google'); set('#authOr', 'auth_or');
+  set('#authConsentTxt', 'auth_consent');
+  const em = $('#authEmail'); if (em) em.placeholder = T('auth_email');
+  const pw = $('#authPass'); if (pw) pw.placeholder = T('auth_password');
+  const nm = $('#authName'); if (nm) nm.placeholder = T('auth_name');
+  const guest = $('#authGuest'); if (guest) guest.textContent = T('auth_guest');
+  const forgot = $('#authForgot'); if (forgot) forgot.textContent = T('auth_forgot');
+  refreshMode();
+}
+
+document.addEventListener('DOMContentLoaded', wire);
+if (document.readyState !== 'loading') wire();
+function wire() {
+  const g = gate(); if (!g || g.dataset.wired) return; g.dataset.wired = '1';
+  translateGate();
+
+  $('#authGoogle').addEventListener('click', async () => {
+    showErr(''); setBusy(true);
+    try {
+      await persistenceReady;                       /* guarantee local persistence before sign-in */
+      const provider = new GoogleAuthProvider();
+      const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+      const mobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+      /* Popups don't persist reliably in iOS/Android PWAs — use full-page redirect there. */
+      if (standalone || mobile) await signInWithRedirect(auth, provider);
+      else await signInWithPopup(auth, provider);
+    } catch (e) { setBusy(false); showErr(friendly(e.code)); }
+  });
+
+  $('#authForm').addEventListener('submit', async e => {
+    e.preventDefault(); showErr('');
+    const email = $('#authEmail').value.trim();
+    const pass = $('#authPass').value;
+    const name = $('#authName').value.trim();
+    if (signupMode) {
+      if (!$('#authConsent').checked) { showErr(T('auth_consent_req')); return; }
+      if (!name) { showErr(isPT() ? 'Introduza o seu nome.' : 'Please enter your name.'); return; }
+    }
+    setBusy(true);
+    try {
+      await persistenceReady;                        /* remember this device across restarts */
+      if (signupMode) {
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        if (name) await updateProfile(cred.user, { displayName: name });
+        await setDoc(doc(db, 'users', cred.user.uid), { consent: true, consentAt: serverTimestamp() }, { merge: true });
+        sendEmailVerification(cred.user).then(() => { if (window.toast) window.toast(T('auth_verify_sent'), '📬'); }).catch(() => {});
+        // onAuthStateChanged already fired; refresh profile name
+        if (window.EdenApp) window.EdenApp.applyProfile({ name: name || email.split('@')[0], email });
+      } else {
+        await signInWithEmailAndPassword(auth, email, pass);
+      }
+    } catch (err) { setBusy(false); showErr(friendly(err.code)); }
+  });
+
+  $('#authToggle').addEventListener('click', () => { signupMode = !signupMode; refreshMode(); });
+  $('#authForgot').addEventListener('click', async () => {
+    showErr('');
+    const email = $('#authEmail').value.trim();
+    if (!email) { showErr(T('auth_reset_need_email')); return; }
+    setBusy(true);
+    try { await sendPasswordResetEmail(auth, email); setBusy(false); showErr(''); if (window.toast) window.toast(T('auth_reset_sent'), '📬'); }
+    catch (e) { setBusy(false); showErr(friendly(e.code)); }
+  });
+  $('#authGuest').addEventListener('click', () => { localStorage.setItem(MODE, 'guest'); hideGate(); if (window.EdenApp) window.EdenApp.maybeOnboard(); });
+
+  // language buttons anywhere (incl. the gate) re-translate the gate
+  document.addEventListener('click', ev => { if (ev.target.closest('.lang-btn')) setTimeout(translateGate, 0); });
+}
