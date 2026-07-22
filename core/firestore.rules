@@ -4,11 +4,15 @@ service cloud.firestore {
 
     // ============ MULTI-TENANT (Phase 5) ============
     // Platform superadmins (EdenRise) — verified email allowlist.
+    // ⚠️ PER-DEPLOYMENT — do NOT overwrite on a core sync. The super-admin
+    // allowlist is specific to THIS Firebase project (Belong). It must match
+    // brands/belong/brand.js `superadmins`. On EdenRise this is the edenrise.com
+    // emails; here it is Belong's platform admin.
     function isSuper() {
       return request.auth != null
         && request.auth.token.email_verified == true
         && request.auth.token.email in [
-          'admin@edenrise.com', 'info@edenrise.com', 'john@edenrise.com'
+          'meridante.pt@gmail.com'
         ];
     }
     // The caller's company, read from their own user doc (cached per request).

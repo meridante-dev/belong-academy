@@ -19,12 +19,17 @@
   shortDesc: 'a community-and-hospitality school giving shape to meaning',
   realm: 'real Belong situations (hosting and making guests feel they belong, seasonal kitchens and tasting, growing and harvesting, caring for nature and place, building community and the circular economy)',
   location: 'Portugal',
-  /* PLACEHOLDER Firebase — a live Belong needs its OWN project (guest browsing works without it) */
+  /* Belong's OWN Firebase project (created 2026-07-17). */
   firebase: {
-    apiKey: 'BELONG_DEMO', authDomain: 'belong-academy.firebaseapp.com', projectId: 'belong-academy',
-    storageBucket: 'belong-academy.appspot.com', messagingSenderId: '0', appId: 'belong-demo'
+    apiKey: 'AIzaSyCxZdTPs__USqmGcnf2dnKsYO6SmxHfd3w',
+    authDomain: 'belong-academy.firebaseapp.com',
+    projectId: 'belong-academy',
+    storageBucket: 'belong-academy.firebasestorage.app',
+    messagingSenderId: '306627126212',
+    appId: '1:306627126212:web:6ab4b3732bc31a58bb7a91',
+    measurementId: 'G-7WLF5ZMDPH'
   },
-  superadmins: [],
+  superadmins: ['meridante.pt@gmail.com'],   /* Belong platform admin (client-side gate; mirrored in core/firestore.rules isSuper) */
   themeColor: '#211613',
   wordSub: 'Academy',
   /* the Belong symbol — a ring (the idea) over a bar (its place / the ground) */
