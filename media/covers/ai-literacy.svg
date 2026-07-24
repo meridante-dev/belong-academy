@@ -1,0 +1,27 @@
+<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg">
+  <!-- Belong · Working Well with AI — terracotta editorial cover, text-free -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="70%">
+      <stop offset="0%" stop-color="#3a241d"/>
+      <stop offset="100%" stop-color="#211613"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#glow)"/>
+  <!-- constellation: the network -->
+  <g stroke="#be594d" stroke-opacity=".38" stroke-width="1.4">
+    <line x1="200" y1="120" x2="320" y2="88"/><line x1="320" y1="88" x2="446" y2="128"/>
+    <line x1="200" y1="120" x2="264" y2="212"/><line x1="446" y1="128" x2="380" y2="216"/>
+    <line x1="264" y1="212" x2="380" y2="216"/><line x1="264" y1="212" x2="320" y2="88"/>
+    <line x1="380" y1="216" x2="320" y2="88"/>
+  </g>
+  <g fill="#d8a08e">
+    <circle cx="200" cy="120" r="7"/><circle cx="446" cy="128" r="7"/>
+    <circle cx="264" cy="212" r="8"/><circle cx="380" cy="216" r="8"/>
+  </g>
+  <!-- the Belong mark at the heart of the network: ring over ground -->
+  <circle cx="320" cy="88" r="26" fill="none" stroke="#be594d" stroke-width="9"/>
+  <rect x="288" y="266" width="64" height="13" rx="6.5" fill="#be594d"/>
+  <line x1="264" y1="212" x2="320" y2="266" stroke="#be594d" stroke-opacity=".38" stroke-width="1.4"/>
+  <line x1="380" y1="216" x2="320" y2="266" stroke="#be594d" stroke-opacity=".38" stroke-width="1.4"/>
+  <circle cx="320" cy="266" r="6" fill="#d8a08e"/>
+</svg>
