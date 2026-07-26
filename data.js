@@ -392,41 +392,27 @@ const tdept = k => { const d = DEPTS.find(x => x.key === k); return d ? (_lang()
 
 /* Field Missions — learn online, prove it on the land. One mission per course (photo-proof). */
 const MISSIONS = {
-  'land-team-journey': { xp: 150,
-    en: { title: 'Catch yourself below the line', brief: 'For three days, notice one moment each day when you slip below the line — blame, excuse or denial. Write the three moments down, and what pulled you back above. Photograph your notes as proof.' },
-    pt: { title: 'Apanhe-se abaixo da linha', brief: 'Durante três dias, repare num momento por dia em que desce abaixo da linha — culpa, desculpa ou negação. Anote os três momentos e o que o trouxe de volta acima. Fotografe as suas notas como prova.' } },
-  'living-soil': { xp: 150,
-    en: { title: 'Dig a test pit', brief: 'Dig a small pit (30cm) somewhere on the land. Photograph the soil profile and note: colour, smell, moisture, and any life you find. The photo is your proof.' },
-    pt: { title: 'Abra uma cova de teste', brief: 'Abra uma pequena cova (30cm) algures no terreno. Fotografe o perfil do solo e anote: cor, cheiro, humidade e a vida que encontrar. A foto é a sua prova.' } },
-  'water-cycles': { xp: 150,
-    en: { title: 'Walk the water', brief: 'On (or right after) a rainy day, walk the land and photograph two places where water flows or pools. Note where you would slow it, spread it, or sink it.' },
-    pt: { title: 'Caminhe com a água', brief: 'Num dia de chuva (ou logo depois), percorra o terreno e fotografe dois locais onde a água corre ou se acumula. Anote onde a iria travar, espalhar ou infiltrar.' } },
-  'composting': { xp: 120,
-    en: { title: 'Feed the pile', brief: 'Build or turn a compost pile using the layering you learned. Photograph the layers (greens/browns) before you close it up.' },
-    pt: { title: 'Alimente a pilha', brief: 'Monte ou vire uma pilha de compostagem com as camadas que aprendeu. Fotografe as camadas (verdes/castanhos) antes de a fechar.' } },
-  'nature-connection': { xp: 100,
-    en: { title: 'One sit spot, three days', brief: 'Sit in the same outdoor spot for 10 minutes, three days in a row. Photograph the spot and note one thing you only noticed on day three.' },
-    pt: { title: 'Um lugar, três dias', brief: 'Sente-se no mesmo lugar ao ar livre 10 minutos, três dias seguidos. Fotografe o lugar e anote algo que só reparou ao terceiro dia.' } }
+  'art-of-hospitality': { xp: 150,
+    en: { title: 'Three names, three stories', brief: 'Over one shift, learn the names of three guests and one true thing about each — and use the name naturally before they leave. Write the three moments down; photograph your notes as proof.' },
+    pt: { title: 'Três nomes, três histórias', brief: 'Num turno, aprenda o nome de três hóspedes e uma coisa verdadeira sobre cada um — e use o nome com naturalidade antes de partirem. Anote os três momentos; fotografe as notas como prova.' } },
+  'belong-to-nature': { xp: 150,
+    en: { title: 'The sit spot', brief: 'Choose one outdoor spot on the property. Sit there 15 minutes in silence, three days in a row. Note what changes each day — light, sound, life. Photograph your notes or the spot as proof.' },
+    pt: { title: 'O lugar de estar', brief: 'Escolha um lugar ao ar livre na propriedade. Sente-se lá 15 minutos em silêncio, três dias seguidos. Anote o que muda a cada dia — luz, som, vida. Fotografe as notas ou o lugar como prova.' } },
+  'growing-regenerating': { xp: 150,
+    en: { title: 'From soil to table', brief: 'Harvest (or help harvest) one thing grown on the land and follow it to a guest\'s plate. Photograph the two ends of that journey — the plant and the plate.' },
+    pt: { title: 'Da terra à mesa', brief: 'Colha (ou ajude a colher) algo cultivado na propriedade e acompanhe-o até ao prato de um hóspede. Fotografe as duas pontas dessa viagem — a planta e o prato.' } }
 };
 const missionFor = id => { const m = MISSIONS[id]; return m ? Object.assign({ xp: m.xp }, _lang() === 'pt' ? m.pt : m.en) : null; };
 
 /* AI Role-Play Coach — practice the hard conversation before it happens */
 const ROLEPLAY = {
-  'land-team-journey': {
-    en: { title: 'The blame spiral', persona: 'Rui, a tired team member', opening: 'Honestly? The seedlings died because Marta never set up the irrigation properly. I did my part. Not my fault.',
-      system: 'You are Rui, a hard-working but frustrated land-team member at a regenerative resort in Alentejo, Portugal. A planting bed failed and you are firmly below the line: blaming Marta, making excuses, denying any part in it. Stay realistic and human — a little defensive at first, warming ONLY if the user leads with curiosity and ownership instead of accusation. Keep replies under 60 words, spoken tone. Never break character, never mention being an AI.',
-      goal: 'Lead Rui back above the line — without blaming him for blaming.', rubric: ['Stayed above the line yourself', 'Curiosity before correction', 'A clear next step, agreed together'] },
-    pt: { title: 'A espiral da culpa', persona: 'Rui, um colega cansado', opening: 'Sinceramente? As mudas morreram porque a Marta nunca montou bem a rega. Eu fiz a minha parte. A culpa não é minha.',
-      system: 'És o Rui, um membro trabalhador mas frustrado da equipa de terra num resort regenerativo no Alentejo. Um canteiro falhou e estás firmemente abaixo da linha: a culpar a Marta, a arranjar desculpas, a negar qualquer parte. Sê realista e humano — defensivo no início, abrindo APENAS se o utilizador liderar com curiosidade e responsabilidade em vez de acusação. Respostas com menos de 60 palavras, tom falado. Nunca saias da personagem, nunca digas que és uma IA.',
-      goal: 'Traga o Rui de volta acima da linha — sem o culpar por culpar.', rubric: ['Manteve-se acima da linha', 'Curiosidade antes de correção', 'Um próximo passo claro, acordado juntos'] }
-  },
-  'community-land': {
-    en: { title: 'The boundary talk', persona: 'Sr. Almeida, a wary neighbour', opening: 'Your people left the shared gate open again. My sheep were on the road. This arrangement is not working for me.',
-      system: 'You are Sr. Almeida, a 60-year-old Alentejo farmer who shares a boundary and a gate with a regenerative resort. You are courteous but firm and skeptical of newcomers. A real grievance: their volunteers left the gate open twice. You soften only with genuine listening, respect for your experience, and a concrete fix. Replies under 60 words, spoken tone. Never break character.',
-      goal: 'Repair trust and agree a practical fix for the gate.', rubric: ['Listened before defending', 'Respected his experience', 'A concrete, checkable agreement'] },
-    pt: { title: 'A conversa da vizinhança', persona: 'Sr. Almeida, um vizinho desconfiado', opening: 'A vossa gente deixou o portão partilhado aberto outra vez. As minhas ovelhas andavam na estrada. Este arranjo não está a funcionar para mim.',
-      system: 'És o Sr. Almeida, um agricultor alentejano de 60 anos que partilha uma extrema e um portão com um resort regenerativo. És cortês mas firme e desconfiado de recém-chegados. Queixa real: os voluntários deixaram o portão aberto duas vezes. Só abrandas com escuta genuína, respeito pela tua experiência e uma solução concreta. Respostas com menos de 60 palavras. Nunca saias da personagem.',
-      goal: 'Repare a confiança e acorde uma solução prática para o portão.', rubric: ['Ouviu antes de se defender', 'Respeitou a experiência dele', 'Um acordo concreto e verificável'] }
+  'art-of-hospitality': {
+    en: { title: 'The cold welcome', persona: 'Clara, a tired arriving guest', opening: 'We booked this months ago. The drive took five hours, the gate code didn\'t work, and now you tell me the room isn\'t ready? This is not what your photos promised.',
+      system: 'You are Clara, a guest arriving exhausted at a countryside retreat in Portugal after a long drive. The gate code failed and your room is not ready. You are frustrated but reasonable underneath — you soften ONLY if the host acknowledges the reality first, offers something concrete now (a drink, a seat, a clear time), and makes you feel seen rather than processed. Stay human, replies under 60 words, spoken tone. Never break character, never mention being an AI.',
+      goal: 'Turn Clara\'s arrival around — acknowledgement first, then one concrete gesture, then the plan.', rubric: ['Acknowledged before explaining', 'Offered something concrete immediately', 'Left her knowing exactly what happens next'] },
+    pt: { title: 'A chegada fria', persona: 'Clara, uma hóspede cansada', opening: 'Reservámos isto há meses. A viagem levou cinco horas, o código do portão não funcionou e agora diz-me que o quarto não está pronto? Não foi isto que as vossas fotos prometeram.',
+      system: 'És a Clara, uma hóspede que chega exausta a um retiro no campo em Portugal depois de uma longa viagem. O código do portão falhou e o quarto não está pronto. Estás frustrada mas és razoável no fundo — só amoleces SE o anfitrião reconhecer primeiro a realidade, oferecer algo concreto já (uma bebida, um lugar, uma hora clara) e te fizer sentir vista em vez de processada. Sê humana, respostas com menos de 60 palavras, tom falado. Nunca saias da personagem, nunca digas que és uma IA.',
+      goal: 'Virar a chegada da Clara — reconhecimento primeiro, depois um gesto concreto, depois o plano.', rubric: ['Reconheceu antes de explicar', 'Ofereceu algo concreto de imediato', 'Deixou-a a saber exatamente o que acontece a seguir'] }
   }
 };
 const roleplayFor = id => { const r = ROLEPLAY[id]; return r ? (_lang() === 'pt' ? r.pt : r.en) : null; };
@@ -444,31 +430,30 @@ const SKILLS = [
   { key: 'safety', en: 'Land safety', pt: 'Segurança no terreno' }
 ];
 const tskill = k => { const s = SKILLS.find(x => x.key === k); return s ? (_lang() === 'pt' ? s.pt : s.en) : k; };
-const CAT_SKILL = { 'Land & Soil': 'soil', 'Water & Climate': 'water', 'Food & Forest': 'food', 'Nature Connection': 'nature', 'Craft & Hands': 'craft', 'Wellbeing': 'wellbeing', 'Community': 'community', 'Leadership': 'leadership', 'Stewardship': 'nature' };
+const CAT_SKILL = { 'Land & Soil': 'soil', 'Water & Climate': 'water', 'Food & Forest': 'food', 'Nature Connection': 'nature', 'Craft & Hands': 'craft', 'Wellbeing': 'wellbeing', 'Community': 'community', 'Leadership': 'leadership', 'Stewardship': 'nature', 'School': 'leadership', 'Staying & Feeling': 'community', 'Growing & Tasting': 'food', 'To Nature': 'nature' };
 const skillsOf = c => COURSE_SKILLS[c.id] || [CAT_SKILL[c.cat] || 'nature'];
 
 /* Journeys — structured milestone paths with a capstone */
 const JOURNEYS = [
   {
-    id: 'land-steward', icon: 'mountain', grad: 7, xp: 300,
-    en: { title: 'The Land Steward Journey', desc: 'From reading the land to a full land plan — the complete formation, proven on the ground.' },
-    pt: { title: 'A Jornada do Guardião da Terra', desc: 'De ler a terra a um plano completo — a formação inteira, provada no terreno.' },
+    id: 'the-host', icon: 'people', grad: 4, xp: 300,
+    en: { title: "The Host's Journey", desc: 'From first welcome to a table that tells a story — the full craft of making people belong.' },
+    pt: { title: 'A Jornada do Anfitrião', desc: 'Do primeiro acolhimento a uma mesa que conta uma história — a arte completa de fazer pertencer.' },
     stages: [
-      { course: 'land-literacy' },
-      { course: 'living-soil', mission: true },
-      { course: 'water-cycles', mission: true },
-      { course: 'agroforestry' },
-      { course: 'capstone-land', capstone: true }
+      { course: 'welcome-belong' },
+      { course: 'art-of-hospitality', mission: true },
+      { course: 'seasonal-table' },
+      { course: 'community-circular', capstone: true }
     ]
   },
   {
-    id: 'grounded-leader', icon: 'compass', grad: 4, xp: 250,
-    en: { title: 'The Grounded Leader', desc: 'Lead a land team the Belong way — above the line, in community, with roots.' },
-    pt: { title: 'O Líder Enraizado', desc: 'Liderar uma equipa de terra à maneira Belong — acima da linha, em comunidade, com raízes.' },
+    id: 'rooted-in-place', icon: 'tree', grad: 7, xp: 250,
+    en: { title: 'Rooted in Place', desc: 'Know the land you stand on — nature, growing, and working well with the tools of our time.' },
+    pt: { title: 'Enraizado no Lugar', desc: 'Conhecer a terra onde está — natureza, cultivo e trabalhar bem com as ferramentas do nosso tempo.' },
     stages: [
-      { course: 'land-team-journey', mission: true },
-      { course: 'ethics' },
-      { course: 'community-land', capstone: true }
+      { course: 'belong-to-nature', mission: true },
+      { course: 'ai-literacy' },
+      { course: 'growing-regenerating', capstone: true }
     ]
   }
 ];
