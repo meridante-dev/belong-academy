@@ -461,7 +461,7 @@ function renderHome() {
   <header class="hero">
     <div class="hero-bg"></div><div class="hero-grid"></div>
     ${featured.poster ? `<div class="hero-art" style="background-image:url('${featured.poster}')"></div>` : ''}
-    <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="hero-fade"></div>
+    <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="hero-fade"></div>
     <div class="hero-content">
       <span class="hero-eyebrow">${t('featured_eyebrow')}</span>
       <h1>${words.join(' ')} <span class="grad-text">${lastWord}</span></h1>
@@ -509,7 +509,7 @@ function renderHome() {
     </div>
     ${pathStepperHTML()}
     <div class="path-banner-foot">
-      <div class="why"> <span><b>${t('why_order')}</b>&nbsp; ${(PATH_RATIONALES[S.lang]||PATH_RATIONALES.en)[S.rationaleIdx % PATH_RATIONALES.en.length]}</span></div>
+      <div class="why"> <span><b>${t('why_order')}</b>&nbsp; ${PATH_RATIONALES[S.rationaleIdx % PATH_RATIONALES.length]}</span></div>
     </div>
   </section>
   <section class="stats">
@@ -551,7 +551,7 @@ function renderPaths() {
       <div class="left">
         <span class="ai-tag">✦ Active path · ${doneCount}/${S.path.length} complete</span>
         <h2>Your path to ${S.goal}</h2>
-        <p class="sub">${(PATH_RATIONALES[S.lang]||PATH_RATIONALES.en)[S.rationaleIdx % PATH_RATIONALES.en.length]}</p>
+        <p class="sub">${PATH_RATIONALES[S.rationaleIdx % PATH_RATIONALES.length]}</p>
       </div>
       <button class="btn btn-glass" data-action="regen-path" id="regenBtn">Regenerate path ↺</button>
     </div>
@@ -4240,7 +4240,7 @@ function openPlayer(courseId, mod) {
     videoEl.style.display = 'none';
     vimeoWrap.classList.add('on');
     vimeoWrap.innerHTML = `<iframe src="https://player.vimeo.com/video/${media.id}?${media.h ? 'h=' + media.h + '&' : ''}title=0&byline=0&portrait=0&badge=0&autoplay=1&autopause=0&dnt=1&player_id=0&app_id=58479" allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="${cmods(c)[mod]}"></iframe>`;
-    armCheckpoint(c, mod);
+    armVimeo(c, mod);
   } else {
     videoEl.src = c.video || vidFor(courseId, mod);
     videoEl.play().catch(() => {});
@@ -4260,6 +4260,7 @@ function openPlayer(courseId, mod) {
   $('#playerComplete').style.display = (media && media.type === 'soon') ? 'none' : '';
   playerEl.classList.add('open');
   if ($('#notesDrawer').classList.contains('open')) refreshNotesDrawer();
+  ledgerAppend('module_start', { courseId, mod });
   maybePretest(c, mod);
 }
 
@@ -4355,24 +4356,38 @@ function checkpointQuestion(c, mod) {
   const qs = courseOwnQuiz(c);
   return qs ? qs[mod % qs.length] : null;
 }
-function armCheckpoint(c, mod) {
+/* Attach to the Vimeo iframe ONCE per module. The <video> element has had an
+   'ended' handler since day one; the Vimeo branch never did, so watching a real
+   lesson to the end recorded nothing — no progress, no XP, no streak day, and
+   no trainingLog entry. trainingLog IS the art. 131.º hour record, so a learner
+   could complete a course and the compliance report would show zero hours. */
+function armVimeo(c, mod) {
   const key = c.id + ':' + mod;
   const q = checkpointQuestion(c, mod);
-  if (!q || (S.checkpoints || {})[key]) return;
+  const needsCheck = q && !(S.checkpoints || {})[key];
   loadVimeoSDK().then(() => {
     const ifr = vimeoWrap.querySelector('iframe');
     if (!ifr || !window.Vimeo || !playing || playing.courseId !== c.id || playing.mod !== mod) return;
     try { vimeoPlayer = new Vimeo.Player(ifr); } catch (e) { return; }
-    let fired = false;
+    let checkFired = false, done = false;
     vimeoPlayer.on('timeupdate', d => {
-      if (fired || !d || !d.percent || d.percent < 0.5) return;
-      fired = true;
+      if (!d || !playing || playing.courseId !== c.id || playing.mod !== mod) return;
+      /* live progress, so a half-watched lesson is not lost on close */
+      const p = prog(c.id); if (p && d.percent) p.pct = Math.max(p.pct || 0, Math.round(d.percent * 100));
+      if (!needsCheck || checkFired || !d.percent || d.percent < 0.5) return;
+      checkFired = true;
       (S.checkpoints = S.checkpoints || {})[key] = 1; save();
       vimeoPlayer.pause().catch(() => {});
       showCheckpoint(q, c);
     });
+    vimeoPlayer.on('ended', () => {
+      if (done || !playing || playing.courseId !== c.id || playing.mod !== mod) return;
+      done = true;
+      completeModule(c.id, mod);
+    });
   }).catch(() => {});
 }
+function armCheckpoint(c, mod) { armVimeo(c, mod); }
 function showCheckpoint(q, c) {
   const ov = $('#ckOv'); if (!ov) return;
   let answered = false;
@@ -4812,7 +4827,7 @@ Deadlines: "Fire Safety on the Land" is required and due in 3 days (it's fire se
 
 Style: warm, encouraging, concise (2-4 sentences unless asked for depth). Refer to his actual progress and path when relevant. You can offer to quiz him — if he agrees, tell him to press the "Quiz me now" button. Never invent courses that aren't in his path or the descriptions above.
 HONESTY: Be honest before being helpful. If you are not sure of something, or the courses don't cover it, say so plainly ("I'm not certain" / "our courses don't cover this yet — check with the land team") instead of guessing. Never invent facts, names, numbers or regulations. When the learner shares their own reasoning, respond to their ACTUAL thinking — name what's right in it before correcting what's off.
-${_lang() === 'pt' ? 'IMPORTANT: Respond in European Portuguese (português de Portugal).' : ''}\n\n${TUTOR_MODES[S.tutorMode || 'explain']}${aiGuardrails()}`;
+${_lang() === 'pt' ? 'IMPORTANT: Respond in European Portuguese (português de Portugal).' : ''}\n\n${TUTOR_MODES[S.tutorMode || 'coach']}${aiGuardrails()}`;
 }
 /* provider-agnostic completion — Claude (sk-ant-…) or free-tier Gemini (AIza…) */
 const aiKey = () => S.apiKey || (window.EdenOrg && window.EdenOrg.aiKey) || '';
@@ -5325,7 +5340,7 @@ addEventListener('keydown', e => {
 
 /* tutor settings */
 function syncTutorModesUI() {
-  document.querySelectorAll('#tutorModes .tmode').forEach(b => { b.classList.toggle('on', b.dataset.mode === (S.tutorMode || 'explain')); const k = b.dataset.tk; if (k) b.textContent = t(k); b.title = t('mode_tip_' + b.dataset.mode); });
+  document.querySelectorAll('#tutorModes .tmode').forEach(b => { b.classList.toggle('on', b.dataset.mode === (S.tutorMode || 'coach')); const k = b.dataset.tk; if (k) b.textContent = t(k); b.title = t('mode_tip_' + b.dataset.mode); });
   const g = $('#groundedNote'); if (g) g.textContent = '🔒 ' + t('grounded_note');
 }
 /* The single line under the input: AI disclosure, grounding and demo-vs-live

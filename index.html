@@ -6,7 +6,7 @@
 <title>Belong Academy — Giving Shape to Meaning</title>
 <meta name="description" content="Belong Academy — learn the Belong way: hospitality and presence, seasonal food and tasting, growing and regenerating, nature connection and community, with adaptive AI paths and an AI tutor.">
 <meta name="theme-color" content="#0e140f">
-<link rel="icon" type="image/svg+xml" href="favicon.svg?v=bel24">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=bel26">
 <meta property="og:title" content="Belong Academy — Regenerative Living, Learned">
 <meta property="og:description" content="Learn the Belong way — hospitality, seasonal food, nature and community, from a school born of a circular vision.">
 <meta property="og:type" content="website">
@@ -26,13 +26,18 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link id="brandFonts" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="brands/belong/brand.js?v=bel24"></script>
-<script src="core/brandkit.js?v=bel24"></script>
-<script src="core/ots.js?v=bel24"></script>
-<link rel="stylesheet" href="core/styles.css?v=bel24">
+<!-- Self-hosted: no third-party font request, so no visitor IP reaches Google.
+     (LG Munchen I, 3 O 17493/20 held CDN font loading to be a GDPR violation
+     precisely because self-hosting is free.) Regenerate with
+     scripts/selfhost-fonts.py. crossorigin is REQUIRED on font preload even
+     same-origin, or the file downloads twice. -->
+<link rel="preload" href="fonts/work-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/source-serif-4-600-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link id="brandFonts" href="fonts/fonts.css?v=bel26" rel="stylesheet">
+<script src="brands/belong/brand.js?v=bel26"></script>
+<script src="core/brandkit.js?v=bel26"></script>
+<script src="core/ots.js?v=bel26"></script>
+<link rel="stylesheet" href="core/styles.css?v=bel26">
 <script>/* per-brand key: several academies share one origin (see app.js STATE_KEY) */
 var _b=(window.BRAND&&window.BRAND.id)||'edenrise';window.AUTH_MODE_KEY=_b==='edenrise'?'eden-auth-mode':_b+'-auth-mode';
 try{var m=localStorage.getItem(window.AUTH_MODE_KEY);document.documentElement.setAttribute('data-gate',(m==='guest'||m==='firebase')?'off':'on');}catch(e){document.documentElement.setAttribute('data-gate','on');}</script>
@@ -225,8 +230,8 @@ try{var m=localStorage.getItem(window.AUTH_MODE_KEY);document.documentElement.se
     <div class="ts-sub" id="tsModesLabel">How it answers</div>
     <div class="tmode-row" id="tutorModes" role="tablist" aria-label="Tutor mode">
       <button class="tmode" data-action="tutor-mode" data-mode="hint" data-tk="mode_hint">Hint</button>
-      <button class="tmode" data-action="tutor-mode" data-mode="coach" data-tk="mode_coach">Coach</button>
-      <button class="tmode on" data-action="tutor-mode" data-mode="explain" data-tk="mode_explain">Explain</button>
+      <button class="tmode on" data-action="tutor-mode" data-mode="coach" data-tk="mode_coach">Coach</button>
+      <button class="tmode" data-action="tutor-mode" data-mode="explain" data-tk="mode_explain">Explain</button>
       <button class="tmode" data-action="tutor-mode" data-mode="practice" data-tk="mode_practice">Practice</button>
       <button class="tmode" data-action="tutor-mode" data-mode="teach" data-tk="mode_teach">Teach the AI</button>
     </div>
@@ -272,10 +277,10 @@ try{var m=localStorage.getItem(window.AUTH_MODE_KEY);document.documentElement.se
 
 <div id="toasts"></div>
 
-<script src="brands/belong/content.js?v=bel24"></script>
-<script src="data.js?v=bel24"></script>
-<script src="core/app.js?v=bel24"></script>
-<script type="module" src="core/auth.js?v=bel24"></script>
+<script src="brands/belong/content.js?v=bel26"></script>
+<script src="data.js?v=bel26"></script>
+<script src="core/app.js?v=bel26"></script>
+<script type="module" src="core/auth.js?v=bel26"></script>
 <script>
 /* Safety net: if the Firebase module can't load (blocked CDN, offline), make sure
    the "continue as guest" button still dismisses the gate so no one is stuck. */

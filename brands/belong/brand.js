@@ -38,7 +38,8 @@
   ogImage: null,
   content: 'brands/belong/content.js',
   fonts: {
-    link: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,500&family=Work+Sans:wght@400;500;600;700&display=swap',
+    /* self-hosted (GDPR: no visitor IP to a third party) — scripts/selfhost-fonts.py */
+    link: 'fonts/fonts.css',
     display: '"Source Serif 4", "Source Serif Pro", Georgia, serif',
     body: '"Work Sans", system-ui, sans-serif'
   },
