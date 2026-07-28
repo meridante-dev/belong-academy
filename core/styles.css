@@ -174,14 +174,31 @@ nav.topnav.scrolled {
   background: linear-gradient(transparent, var(--bg));
 }
 .orb {
-  position: absolute; border-radius: 50%; filter: blur(70px); z-index: 1;
-  animation: drift 14s ease-in-out infinite alternate;
+  position: absolute; border-radius: 50%; filter: blur(100px); z-index: 1;
+  will-change: transform; animation: drift 36s ease-in-out infinite alternate;
 }
-.orb-1 { width: 440px; height: 440px; top: 4%; right: 8%; background: rgba(200,164,93,.24); }
-.orb-2 { width: 320px; height: 320px; top: 38%; right: 26%; background: rgba(90,111,80,.28); animation-delay: -6s; }
+.orb-1 { width: 620px; height: 620px; top: -4%; right: 4%; background: rgba(200,164,93,.26); }
+.orb-2 { width: 460px; height: 460px; top: 34%; right: 22%; background: rgba(90,111,80,.3);
+  animation-name: drift2; animation-duration: 46s; animation-delay: -14s; }
+.orb-3 { width: 420px; height: 420px; bottom: 2%; left: 28%; background: rgba(146,94,63,.22);
+  animation-name: drift3; animation-duration: 58s; animation-delay: -26s; }
 @keyframes drift {
-  from { transform: translate(0,0) scale(1); }
-  to   { transform: translate(-50px, 36px) scale(1.12); }
+  from { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(-70px, 48px, 0) scale(1.14); }
+  to   { transform: translate3d(28px, -30px, 0) scale(1.04); }
+}
+@keyframes drift2 {
+  from { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(56px, -44px, 0) scale(1.18); }
+  to   { transform: translate3d(-38px, 26px, 0) scale(.96); }
+}
+@keyframes drift3 {
+  from { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(64px, -36px, 0) scale(1.1); }
+  to   { transform: translate3d(-46px, 20px, 0) scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb, .hero-art { animation: none; }
 }
 .hero-content { position: relative; z-index: 3; max-width: 640px; }
 .hero-eyebrow {
@@ -1300,6 +1317,13 @@ footer .links button:hover { color: var(--text); }
   background-size: cover; background-position: center right; opacity: .5;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 58%);
   mask-image: linear-gradient(90deg, transparent, #000 58%);
+  animation: artDrift 52s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes artDrift {
+  from { transform: scale(1.06) translate3d(0, 0, 0); }
+  50%  { transform: scale(1.12) translate3d(-2.2%, 1.6%, 0); }
+  to   { transform: scale(1.08) translate3d(1.4%, -1.2%, 0); }
 }
 
 /* ---------- mobile polish ---------- */

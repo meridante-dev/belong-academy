@@ -461,7 +461,7 @@ function renderHome() {
   <header class="hero">
     <div class="hero-bg"></div><div class="hero-grid"></div>
     ${featured.poster ? `<div class="hero-art" style="background-image:url('${featured.poster}')"></div>` : ''}
-    <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="hero-fade"></div>
+    <div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div><div class="hero-fade"></div>
     <div class="hero-content">
       <span class="hero-eyebrow">${t('featured_eyebrow')}</span>
       <h1>${words.join(' ')} <span class="grad-text">${lastWord}</span></h1>
@@ -509,7 +509,7 @@ function renderHome() {
     </div>
     ${pathStepperHTML()}
     <div class="path-banner-foot">
-      <div class="why"> <span><b>${t('why_order')}</b>&nbsp; ${PATH_RATIONALES[S.rationaleIdx % PATH_RATIONALES.length]}</span></div>
+      <div class="why"> <span><b>${t('why_order')}</b>&nbsp; ${(PATH_RATIONALES[S.lang]||PATH_RATIONALES.en)[S.rationaleIdx % PATH_RATIONALES.en.length]}</span></div>
     </div>
   </section>
   <section class="stats">
@@ -551,7 +551,7 @@ function renderPaths() {
       <div class="left">
         <span class="ai-tag">✦ Active path · ${doneCount}/${S.path.length} complete</span>
         <h2>Your path to ${S.goal}</h2>
-        <p class="sub">${PATH_RATIONALES[S.rationaleIdx % PATH_RATIONALES.length]}</p>
+        <p class="sub">${(PATH_RATIONALES[S.lang]||PATH_RATIONALES.en)[S.rationaleIdx % PATH_RATIONALES.en.length]}</p>
       </div>
       <button class="btn btn-glass" data-action="regen-path" id="regenBtn">Regenerate path ↺</button>
     </div>
